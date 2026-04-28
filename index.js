@@ -134,11 +134,18 @@ function corsMiddleware(req, res, next) {
 }
 
 // ---------------------------------------------------------------------------
-// OAuth Protected Resource Metadata (RFC 9728)
-// Public endpoint so Claude.ai can discover the authorization server.
+// OAuth discovery endpoints (must be public — before any auth gate).
+//
+// Claude.ai's cloud connector probes both:
+//   /.well-known/oauth-authorization-server (RFC 8414, AS metadata)
+//   /.well-known/oauth-protected-resource    (RFC 9728, PRM)
+//
+// Serving AS metadata directly (with Authelia's endpoints baked in) is what
+// the existing paperless-mcp / smtp-mcp stack does and is what makes the
+// "URL only" connector dialog work end-to-end.
 // ---------------------------------------------------------------------------
-function mountProtectedResourceMetadata(app) {
-  const body = {
+function mountDiscoveryEndpoints(app) {
+  const prmBody = {
     resource: publicBaseUrl,
     authorization_servers: oidcIssuerUrl ? [oidcIssuerUrl] : [],
     bearer_methods_supported: ['header'],
@@ -146,14 +153,31 @@ function mountProtectedResourceMetadata(app) {
     resource_name: 'Outlook MCP Server',
     resource_documentation: 'https://github.com/marco2901/outlook-mcp-server'
   };
-  // Spec-compliant location and the path-specific variant some clients probe.
+
   for (const path of [
     '/.well-known/oauth-protected-resource',
     '/.well-known/oauth-protected-resource/mcp'
   ]) {
     app.get(path, (_req, res) => {
       res.setHeader('Cache-Control', 'public, max-age=3600');
-      res.json(path.endsWith('/mcp') ? { ...body, resource: `${publicBaseUrl}/mcp` } : body);
+      res.json(path.endsWith('/mcp') ? { ...prmBody, resource: `${publicBaseUrl}/mcp` } : prmBody);
+    });
+  }
+
+  if (oidcIssuerUrl) {
+    app.get('/.well-known/oauth-authorization-server', (_req, res) => {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.json({
+        issuer: oidcIssuerUrl,
+        authorization_endpoint: `${oidcIssuerUrl}/api/oidc/authorization`,
+        token_endpoint: `${oidcIssuerUrl}/api/oidc/token`,
+        jwks_uri: `${oidcIssuerUrl}/jwks.json`,
+        introspection_endpoint: `${oidcIssuerUrl}/api/oidc/introspection`,
+        response_types_supported: ['code'],
+        grant_types_supported: ['authorization_code', 'refresh_token'],
+        code_challenge_methods_supported: ['S256'],
+        scopes_supported: ['openid', 'profile', 'email']
+      });
     });
   }
 }
@@ -346,9 +370,9 @@ async function main() {
     // clients (Claude.ai cloud connector) before any auth gate kicks in.
     app.use(corsMiddleware);
 
-    // Public discovery endpoints (RFC 9728) so OAuth clients can find the
-    // authorization server without prior authentication.
-    mountProtectedResourceMetadata(app);
+    // Public discovery endpoints (RFC 8414 + RFC 9728) so OAuth clients can
+    // find the authorization server without prior authentication.
+    mountDiscoveryEndpoints(app);
 
     // Public OAuth bootstrap (no MCP auth gate — Microsoft owns the flow,
     // CSRF state protects the callback).
