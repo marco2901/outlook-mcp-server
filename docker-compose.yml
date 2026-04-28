@@ -1,11 +1,6 @@
 services:
   outlook-mcp-server:
     image: ghcr.io/marco2901/outlook-mcp-server:latest
-    # Falls Image nicht in GHCR vorhanden ist (z.B. auf Dev-Maschine),
-    # baut docker compose lokal aus dem Dockerfile und taggt auf den image-Namen.
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: outlook-mcp-server
     restart: unless-stopped
     environment:
