@@ -60,6 +60,8 @@ const mcpApiKey = process.env.MCP_API_KEY || '';
 const oidcIntrospectionUrl = process.env.OIDC_INTROSPECTION_URL || '';
 const oidcClientId = process.env.OIDC_CLIENT_ID || '';
 const oidcClientSecret = process.env.OIDC_CLIENT_SECRET || '';
+const oidcIssuerUrl = (process.env.OIDC_ISSUER_URL || '').replace(/\/+$/, '');
+const publicBaseUrl = (process.env.OAUTH_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
 
 async function isAuthorized(req) {
   if (!mcpApiKey && !oidcIntrospectionUrl) return true; // no gating configured
@@ -95,9 +97,65 @@ async function isAuthorized(req) {
 
 function authMiddleware(req, res, next) {
   isAuthorized(req).then((ok) => {
-    if (ok) next();
-    else res.status(401).send('Unauthorized');
+    if (ok) return next();
+    // RFC 6750 + RFC 9728: tell the client where to find the protected
+    // resource metadata so it can discover the authorization server.
+    if (publicBaseUrl) {
+      res.setHeader(
+        'WWW-Authenticate',
+        `Bearer realm="outlook-mcp", resource_metadata="${publicBaseUrl}/.well-known/oauth-protected-resource"`
+      );
+    }
+    res.status(401).send('Unauthorized');
   });
+}
+
+// ---------------------------------------------------------------------------
+// CORS — allow Claude.ai cloud connector + browser-based MCP clients
+// ---------------------------------------------------------------------------
+function corsMiddleware(req, res, next) {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Authorization, Content-Type, Accept, mcp-session-id, mcp-protocol-version, last-event-id'
+  );
+  res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id, WWW-Authenticate');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+}
+
+// ---------------------------------------------------------------------------
+// OAuth Protected Resource Metadata (RFC 9728)
+// Public endpoint so Claude.ai can discover the authorization server.
+// ---------------------------------------------------------------------------
+function mountProtectedResourceMetadata(app) {
+  const body = {
+    resource: publicBaseUrl,
+    authorization_servers: oidcIssuerUrl ? [oidcIssuerUrl] : [],
+    bearer_methods_supported: ['header'],
+    scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
+    resource_name: 'Outlook MCP Server',
+    resource_documentation: 'https://github.com/marco2901/outlook-mcp-server'
+  };
+  // Spec-compliant location and the path-specific variant some clients probe.
+  for (const path of [
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/oauth-protected-resource/mcp'
+  ]) {
+    app.get(path, (_req, res) => {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.json(path.endsWith('/mcp') ? { ...body, resource: `${publicBaseUrl}/mcp` } : body);
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +341,14 @@ async function main() {
   if (useHttp) {
     const app = express();
     app.use(express.json());
+
+    // CORS first — ensures preflight (OPTIONS) succeeds for browser-based
+    // clients (Claude.ai cloud connector) before any auth gate kicks in.
+    app.use(corsMiddleware);
+
+    // Public discovery endpoints (RFC 9728) so OAuth clients can find the
+    // authorization server without prior authentication.
+    mountProtectedResourceMetadata(app);
 
     // Public OAuth bootstrap (no MCP auth gate — Microsoft owns the flow,
     // CSRF state protects the callback).
