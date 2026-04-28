@@ -1,14 +1,15 @@
 {
-  "name": "m365-mcp",
+  "name": "outlook-mcp-server",
   "version": "2.0.0",
-  "description": "MCP server for Claude to access Microsoft 365 (Outlook, OneDrive, Power Automate) via Microsoft Graph API",
+  "description": "MCP server for Microsoft 365 (Outlook, OneDrive, Power Automate) via Microsoft Graph API. Forked from ryaker/outlook-mcp with HTTP transport, MCP auth gateway and OAuth callback integrated.",
   "main": "index.js",
   "bin": {
-    "m365-mcp": "./index.js",
-    "m365-mcp-auth": "./outlook-auth-server.js"
+    "outlook-mcp": "./index.js",
+    "outlook-mcp-auth": "./outlook-auth-server.js"
   },
   "scripts": {
     "start": "node index.js",
+    "start:http": "node index.js --http --port 3000",
     "auth-server": "node outlook-auth-server.js",
     "test-mode": "USE_TEST_MODE=true node index.js",
     "inspect": "npx @modelcontextprotocol/inspector node index.js",
@@ -28,7 +29,8 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "dotenv": "^16.5.0"
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/inspector": "^0.10.2",
@@ -36,6 +38,6 @@
     "supertest": "^7.0.0"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=20.0.0"
   }
 }

@@ -1,0 +1,44 @@
+services:
+  outlook-mcp-server:
+    image: ghcr.io/marco2901/outlook-mcp-server:latest
+    container_name: outlook-mcp-server
+    restart: unless-stopped
+    environment:
+      # Microsoft Graph App Registration
+      - MS_CLIENT_ID=${MS_CLIENT_ID}
+      - MS_CLIENT_SECRET=${MS_CLIENT_SECRET}
+      - MS_TENANT_ID=${MS_TENANT_ID:-common}
+      - MS_AUTHORITY_HOST=${MS_AUTHORITY_HOST:-https://login.microsoftonline.com}
+      - MS_SCOPES=${MS_SCOPES:-offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Files.Read Files.ReadWrite Contacts.Read}
+      # Public OAuth callback URL — must match the redirect URI registered in Azure
+      - OAUTH_PUBLIC_BASE_URL=https://${MCP_DOMAIN}
+      # Token persistence (mounted volume)
+      - TOKEN_STORE_PATH=/data/outlook-mcp-tokens.json
+      # MCP gateway auth
+      - MCP_API_KEY=${MCP_API_KEY}
+      # Authelia OIDC – für Claude.ai OAuth (optional)
+      - OIDC_INTROSPECTION_URL=http://authelia:9091/api/oidc/introspection
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+    volumes:
+      - outlook-mcp-tokens:/data
+    expose:
+      - "3000"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.outlook-mcp.rule=Host(`${MCP_DOMAIN}`)
+      - traefik.http.routers.outlook-mcp.entrypoints=websecure
+      - traefik.http.services.outlook-mcp.loadbalancer.server.port=3000
+      - traefik.http.routers.outlook-mcp.tls.certresolver=mydnschallenge
+      - traefik.http.routers.outlook-mcp.tls=true
+      - traefik.http.routers.outlook-mcp.middlewares=middlewares-rate-limit@file,middlewares-secure-headers@file
+    networks:
+      - traefik
+
+volumes:
+  outlook-mcp-tokens:
+
+networks:
+  traefik:
+    external: true

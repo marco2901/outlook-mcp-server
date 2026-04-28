@@ -7,22 +7,29 @@ const os = require('os');
 // Ensure we have a home directory path even if process.env.HOME is undefined
 const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir() || '/tmp';
 
+// Public base URL where the OAuth callback is reachable. In a Docker/Traefik
+// deployment this is e.g. https://outlook-mcp.example.com. For local stdio
+// usage it falls back to the legacy localhost:3333 server.
+const publicBaseUrl = (process.env.OAUTH_PUBLIC_BASE_URL || 'http://localhost:3333').replace(/\/+$/, '');
+
 module.exports = {
   // Server information
   SERVER_NAME: "m365-assistant",
   SERVER_VERSION: "2.0.0",
-  
+
   // Test mode setting
   USE_TEST_MODE: process.env.USE_TEST_MODE === 'true',
-  
+
   // Authentication configuration
   AUTH_CONFIG: {
-    clientId: process.env.OUTLOOK_CLIENT_ID || '',
-    clientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
-    redirectUri: 'http://localhost:3333/auth/callback',
-    scopes: ['Mail.Read', 'Mail.ReadWrite', 'Mail.Send', 'User.Read', 'Calendars.Read', 'Calendars.ReadWrite', 'Files.Read', 'Files.ReadWrite'],
-    tokenStorePath: path.join(homeDir, '.outlook-mcp-tokens.json'),
-    authServerUrl: 'http://localhost:3333'
+    clientId: process.env.MS_CLIENT_ID || process.env.OUTLOOK_CLIENT_ID || '',
+    clientSecret: process.env.MS_CLIENT_SECRET || process.env.OUTLOOK_CLIENT_SECRET || '',
+    tenantId: process.env.MS_TENANT_ID || 'common',
+    authorityHost: (process.env.MS_AUTHORITY_HOST || 'https://login.microsoftonline.com').replace(/\/+$/, ''),
+    redirectUri: process.env.MS_REDIRECT_URI || `${publicBaseUrl}/auth/callback`,
+    scopes: ['offline_access', 'Mail.Read', 'Mail.ReadWrite', 'Mail.Send', 'User.Read', 'Calendars.Read', 'Calendars.ReadWrite', 'Contacts.Read', 'Files.Read', 'Files.ReadWrite'],
+    tokenStorePath: process.env.TOKEN_STORE_PATH || path.join(homeDir, '.outlook-mcp-tokens.json'),
+    authServerUrl: publicBaseUrl
   },
   
   // Microsoft Graph API

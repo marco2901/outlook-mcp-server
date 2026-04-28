@@ -1,4 +1,5 @@
 const fs = require('fs').promises;
+const os = require('os');
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
@@ -12,11 +13,17 @@ class TokenStorage {
     const clientId = process.env.MS_CLIENT_ID || process.env.OUTLOOK_CLIENT_ID;
     const clientSecret = process.env.MS_CLIENT_SECRET || process.env.OUTLOOK_CLIENT_SECRET;
 
+    // TOKEN_STORE_PATH wins; fall back to ~/.outlook-mcp-tokens.json
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir() || '/tmp';
+    const defaultTokenPath = path.join(homeDir, '.outlook-mcp-tokens.json');
+
+    const publicBaseUrl = (process.env.OAUTH_PUBLIC_BASE_URL || 'http://localhost:3333').replace(/\/+$/, '');
+
     this.config = {
-      tokenStorePath: path.join(process.env.HOME || process.env.USERPROFILE, '.outlook-mcp-tokens.json'),
+      tokenStorePath: process.env.TOKEN_STORE_PATH || defaultTokenPath,
       clientId,
       clientSecret,
-      redirectUri: process.env.MS_REDIRECT_URI || 'http://localhost:3333/auth/callback',
+      redirectUri: process.env.MS_REDIRECT_URI || `${publicBaseUrl}/auth/callback`,
       scopes: (process.env.MS_SCOPES || 'offline_access User.Read Mail.Read').split(' '),
       tenantId,
       tokenEndpoint: process.env.MS_TOKEN_ENDPOINT || `${authorityHost}/${tenantId}/oauth2/v2.0/token`,
