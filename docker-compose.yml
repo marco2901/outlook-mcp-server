@@ -17,7 +17,9 @@ services:
       # MCP gateway auth
       - MCP_API_KEY=${MCP_API_KEY}
       # Authelia OIDC – für Claude.ai OAuth
-      - OIDC_INTROSPECTION_URL=http://authelia:9091/api/oidc/introspection
+      # Authelia 4.39+: external HTTPS URL — internal http://authelia:9091
+      # is rejected because the X-Forwarded-Proto header is missing/'http'.
+      - OIDC_INTROSPECTION_URL=https://authelia.your-domain.com/api/oidc/introspection
       - OIDC_ISSUER_URL=${OIDC_ISSUER_URL}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}

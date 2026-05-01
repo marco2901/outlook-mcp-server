@@ -69,7 +69,7 @@ In `configuration.yml` unter `identity_providers.oidc.clients`:
 ```yaml
 - client_id: outlook-mcp
   client_name: Outlook MCP Server
-  client_secret: <bcrypt-hash deines OIDC_CLIENT_SECRET>
+  client_secret: '$pbkdf2-sha512$310000$<pbkdf2-hash deines OIDC_CLIENT_SECRET>'
   public: false
   authorization_policy: one_factor
   redirect_uris:
@@ -78,17 +78,20 @@ In `configuration.yml` unter `identity_providers.oidc.clients`:
   grant_types: [authorization_code, refresh_token]
   response_types: [code]
   token_endpoint_auth_method: client_secret_post
+  introspection_endpoint_auth_method: client_secret_basic
 ```
 
-Hash erzeugen z.B. mit:
-```bash
-docker exec -it authelia authelia crypto hash generate argon2 \
-  --password '<plain-OIDC_CLIENT_SECRET>'
-# oder bcrypt:
-htpasswd -bnBC 12 "" '<plain-OIDC_CLIENT_SECRET>' | tr -d ':\n'
-```
-
-→ Authelia restart.
+> **Authelia 4.39+:** Client‑Secrets müssen pbkdf2 oder argon2id sein —
+> bcrypt (`$2b$…`/`$2y$…`) führt zu *„client secret did not match"*-Fehlern
+> am Token‑Endpoint. Hash erzeugen:
+> ```bash
+> docker run --rm authelia/authelia:latest \
+>   authelia crypto hash generate pbkdf2 --variant sha512 \
+>   --password '<plain-OIDC_CLIENT_SECRET>'
+> ```
+> Den `Digest:`-Wert (z.B. `$pbkdf2-sha512$310000$…`) als `client_secret`
+> in `configuration.yml` eintragen, der Klartext kommt in
+> `OIDC_CLIENT_SECRET` im Stack. Anschließend Authelia neu starten.
 
 ### 3. Stack in Portainer
 
@@ -109,7 +112,8 @@ services:
       - OAUTH_PUBLIC_BASE_URL=https://${MCP_DOMAIN}
       - TOKEN_STORE_PATH=/data/outlook-mcp-tokens.json
       - MCP_API_KEY=${MCP_API_KEY}
-      - OIDC_INTROSPECTION_URL=http://authelia:9091/api/oidc/introspection
+      # Authelia 4.39+: externe HTTPS-URL nutzen, sonst X-Forwarded-Proto-Reject.
+      - OIDC_INTROSPECTION_URL=https://authelia.your-domain.com/api/oidc/introspection
       - OIDC_ISSUER_URL=${OIDC_ISSUER_URL}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
@@ -164,7 +168,7 @@ Browser auf `https://<MCP_DOMAIN>/auth` öffnen → Microsoft‑Login mit deinem
 |---|---|
 | URL | `https://<MCP_DOMAIN>/mcp` |
 | Client ID | `outlook-mcp` |
-| Client Secret | dein Plain‑`OIDC_CLIENT_SECRET` (nicht der bcrypt‑Hash) |
+| Client Secret | dein Plain‑`OIDC_CLIENT_SECRET` (nicht der pbkdf2‑Hash) |
 
 Beim ersten Connect läuft der Authelia‑Login durch, danach sind die Tools dauerhaft verfügbar.
 
