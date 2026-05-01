@@ -1,37 +1,42 @@
 # Outlook MCP Server
 
-Ein MCP-Server für **Microsoft 365** (Outlook, OneDrive, Power Automate) über die Microsoft Graph + Flow API. Fork von [`ryaker/outlook-mcp`](https://github.com/ryaker/outlook-mcp), erweitert um:
+Ein MCP‑Server für **Microsoft 365** (Outlook, OneDrive, Power Automate) über die Microsoft Graph + Flow API. Fork von [`ryaker/outlook-mcp`](https://github.com/ryaker/outlook-mcp), erweitert um:
 
-- **Streamable HTTP + SSE Transport** (zusätzlich zu stdio) — für Remote-Use über Traefik / Claude.ai
-- **MCP-Auth-Gateway** — `MCP_API_KEY` (statisches Bearer) ODER Authelia-OIDC-Introspection
-- **OAuth-Callback im selben Express-App** — kein separater Server auf `localhost:3333` mehr nötig, Redirect läuft auf `https://<MCP_DOMAIN>/auth/callback`
-- **Konfigurierbarer Token-Store** (`TOKEN_STORE_PATH`) — Persistenz über Docker-Volume
-- **Dockerfile + docker-compose mit Traefik-Labels** — passt in das bestehende `smtp-mcp-server` / `paperless-mcp-server` Setup
+- **Streamable HTTP + SSE Transport** zusätzlich zu stdio — für Remote‑Use über Traefik / Claude.ai
+- **MCP‑Auth‑Gateway** — `MCP_API_KEY` (statisches Bearer) für CLI/Claude‑Desktop, **Authelia‑OIDC‑Introspection** für Claude.ai cloud
+- **OAuth‑Discovery** nach RFC 8414 + RFC 9728 — `/.well-known/oauth-authorization-server` & `/.well-known/oauth-protected-resource` öffentlich, damit Claude.ai cloud den Konnektor automatisch ausrollt
+- **Microsoft‑OAuth‑Bootstrap** im selben Express‑App (`/auth`, `/auth/callback`), kein zweiter Server auf `localhost:3333` mehr nötig
+- **Konfigurierbarer Token‑Store** (`TOKEN_STORE_PATH`) — Persistenz über Docker‑Volume
+- **Dockerfile + Traefik‑Compose** — passt 1:1 in das gleiche Setup wie `smtp-mcp-server` / `paperless-mcp-server`
 
 ## Toolset
 
-Geerbt vom Upstream — komplettes M365 Toolset:
+Komplett vom Upstream geerbt:
 
-- **Outlook** — Mail (list/search/read/send/move/delete), Kalender (list/create/accept/decline/delete events), Folder-Operationen, Inbox-Rules
-- **OneDrive** — Datei-/Ordner-Listing, Suche, Download, Upload (klein + chunked), Teilen, Löschen
-- **Power Automate** — Environments, Flows (list/run/toggle), Run-History
-- **Auth** — `authenticate`, `check-auth-status`, `about`
-
-Vollständige Tool-Liste via `tools/list` oder beim Upstream-Repo nachschlagen.
+| Bereich | Tools |
+|---|---|
+| **Mail** | list/search/read/send/move/delete, draft, mark‑as‑read |
+| **Kalender** | list/create/cancel/accept/decline/delete events |
+| **Folder** | list, create, move |
+| **Rules** | list, create, edit‑sequence |
+| **OneDrive** | list/search/download/upload (klein + chunked), share, delete, create‑folder |
+| **Power Automate** | environments, flows (list/run/toggle), run‑history |
+| **Auth** | `authenticate`, `check-auth-status`, `about` |
 
 ## Architektur
 
 ```
 ┌─ Browser ────────────────┐                ┌─ Claude.ai / Claude Desktop ─┐
 │ /auth, /auth/callback    │                │ POST /mcp (Streamable HTTP)  │
-│ (OAuth Bootstrap, public)│                │ GET /sse + POST /messages    │
+│ (MS OAuth Bootstrap)     │                │ GET /sse + POST /messages    │
+│ /.well-known/oauth-*     │                │                              │
 └───────────┬──────────────┘                └────────────┬─────────────────┘
             │                                            │
-            │       Traefik (TLS)                        │
+            │       Traefik (TLS, DNS-01)                │
             ▼                                            ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ Express (port 3000)                                                      │
-│  ├─ public:        /, /auth, /auth/callback                              │
+│  ├─ public:         /, /auth, /auth/callback, /.well-known/oauth-*       │
 │  └─ authMiddleware: /mcp, /sse, /messages                                │
 │      (MCP_API_KEY === Bearer)  OR  (Authelia OIDC introspection)         │
 │                                                                          │
@@ -45,58 +50,136 @@ Vollständige Tool-Liste via `tools/list` oder beim Upstream-Repo nachschlagen.
 
 ## Setup
 
-### 1. Azure App Registration
+### 1. Microsoft Entra App‑Registrierung
 
-1. [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID** → **App registrations** → **New registration**
-2. Redirect URI: **Web** → `https://<dein-host>/auth/callback`
-3. **Certificates & secrets** → neuen Client-Secret-VALUE (nicht ID!) erzeugen
-4. **API permissions** → Microsoft Graph → Delegated:
-   - `Mail.Read`, `Mail.ReadWrite`, `Mail.Send`
-   - `Calendars.Read`, `Calendars.ReadWrite`
-   - `Files.Read`, `Files.ReadWrite`
-   - `Contacts.Read`
-   - `User.Read`, `offline_access`
-5. (Optional Power Automate) → Flow service: `https://service.flow.microsoft.com//.default`
+1. [Entra Admin Center](https://entra.microsoft.com) → **Identity → Applications → App registrations → New registration**
+2. **Redirect URI** (Platform = **Web**): `https://<MCP_DOMAIN>/auth/callback`
+3. **Certificates & secrets** → neuen Client‑Secret‑**VALUE** (nicht ID!) erzeugen, 24 Monate
+4. **API permissions → Microsoft Graph → Delegated** — anhaken:
+   ```
+   offline_access  User.Read  Mail.Read  Mail.ReadWrite  Mail.Send
+   Calendars.Read  Calendars.ReadWrite  Files.Read  Files.ReadWrite  Contacts.Read
+   ```
+   → **Grant admin consent for <Tenant>**
 
-### 2. Konfiguration
+### 2. Authelia‑Client (Claude.ai cloud OAuth)
 
-`cp .env.example .env` und befüllen:
+In `configuration.yml` unter `identity_providers.oidc.clients`:
 
-```env
-MS_CLIENT_ID=...
-MS_CLIENT_SECRET=...
-MS_TENANT_ID=...                 # tenant GUID oder "common"
-OAUTH_PUBLIC_BASE_URL=https://outlook-mcp.example.com
-MCP_DOMAIN=outlook-mcp.example.com
-MCP_API_KEY=...                  # für CLI/Tooling-Zugriff
-OIDC_CLIENT_ID=outlook-mcp       # für Claude.ai OAuth via Authelia
-OIDC_CLIENT_SECRET=...
+```yaml
+- client_id: outlook-mcp
+  client_name: Outlook MCP Server
+  client_secret: <bcrypt-hash deines OIDC_CLIENT_SECRET>
+  public: false
+  authorization_policy: one_factor
+  redirect_uris:
+    - https://claude.ai/api/mcp/auth_callback
+  scopes: [openid, profile, email, offline_access, address, phone, groups]
+  grant_types: [authorization_code, refresh_token]
+  response_types: [code]
+  token_endpoint_auth_method: client_secret_post
 ```
 
-### 3. Deployment
-
+Hash erzeugen z.B. mit:
 ```bash
-docker compose up -d
+docker exec -it authelia authelia crypto hash generate argon2 \
+  --password '<plain-OIDC_CLIENT_SECRET>'
+# oder bcrypt:
+htpasswd -bnBC 12 "" '<plain-OIDC_CLIENT_SECRET>' | tr -d ':\n'
 ```
 
-Image kommt aus `ghcr.io/marco2901/outlook-mcp-server:latest` (build via GitHub Action). Lokal bauen: `docker build -t outlook-mcp-server .`.
+→ Authelia restart.
 
-### 4. OAuth-Bootstrap (einmalig)
+### 3. Stack in Portainer
 
-Browser auf `https://<MCP_DOMAIN>/auth` öffnen → Microsoft-Login durchlaufen → Tokens werden ins Volume nach `/data/outlook-mcp-tokens.json` geschrieben (mode 0600). Refresh läuft automatisch.
+**Stacks → Add stack → Web editor:**
 
-Anschließend in Claude:
-- **Claude Desktop / Code (Remote MCP)**: URL `https://<MCP_DOMAIN>/mcp`, Bearer = `MCP_API_KEY`
-- **Claude.ai (Cloud)**: über Authelia-OIDC-Login authentisieren
+```yaml
+services:
+  outlook-mcp-server:
+    image: ghcr.io/marco2901/outlook-mcp-server:latest
+    container_name: outlook-mcp-server
+    restart: unless-stopped
+    environment:
+      - MS_CLIENT_ID=${MS_CLIENT_ID}
+      - MS_CLIENT_SECRET=${MS_CLIENT_SECRET}
+      - MS_TENANT_ID=${MS_TENANT_ID:-common}
+      - MS_AUTHORITY_HOST=${MS_AUTHORITY_HOST:-https://login.microsoftonline.com}
+      - MS_SCOPES=${MS_SCOPES:-offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Files.Read Files.ReadWrite Contacts.Read}
+      - OAUTH_PUBLIC_BASE_URL=https://${MCP_DOMAIN}
+      - TOKEN_STORE_PATH=/data/outlook-mcp-tokens.json
+      - MCP_API_KEY=${MCP_API_KEY}
+      - OIDC_INTROSPECTION_URL=http://authelia:9091/api/oidc/introspection
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+    volumes:
+      - outlook-mcp-tokens:/data
+    expose:
+      - "3000"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.outlook-mcp.rule=Host(`${MCP_DOMAIN}`)
+      - traefik.http.routers.outlook-mcp.entrypoints=websecure
+      - traefik.http.services.outlook-mcp.loadbalancer.server.port=3000
+      - traefik.http.routers.outlook-mcp.tls.certresolver=mydnschallenge
+      - traefik.http.routers.outlook-mcp.tls=true
+      - traefik.http.routers.outlook-mcp.middlewares=middlewares-rate-limit@file,middlewares-secure-headers@file
+    networks:
+      - traefik
 
-## Lokal (stdio)
+volumes:
+  outlook-mcp-tokens:
 
-Für Claude Desktop direkt ohne Docker:
+networks:
+  traefik:
+    external: true
+```
+
+**Environment variables** (im Portainer‑Stack):
+
+| Name | Beispiel‑Wert |
+|---|---|
+| `MS_CLIENT_ID` | aus Entra → Übersicht → Anwendungs‑(Client‑)ID |
+| `MS_CLIENT_SECRET` | Secret‑Value aus Entra |
+| `MS_TENANT_ID` | aus Entra → Übersicht → Verzeichnis‑(Mandanten‑)ID |
+| `MCP_DOMAIN` | `outlook-mcp.example.com` |
+| `MCP_API_KEY` | `openssl rand -hex 32` |
+| `OIDC_ISSUER_URL` | `https://authelia.example.com` |
+| `OIDC_CLIENT_ID` | `outlook-mcp` |
+| `OIDC_CLIENT_SECRET` | Plain‑Wert (ohne Hash) |
+
+→ **Deploy the stack**.
+
+### 4. Microsoft OAuth‑Bootstrap (einmalig)
+
+Browser auf `https://<MCP_DOMAIN>/auth` öffnen → Microsoft‑Login mit deinem M365‑Account → "Authentication successful". Tokens liegen im Volume `outlook-mcp-tokens`, Refresh läuft automatisch via `offline_access`.
+
+### 5. Claude.ai cloud Connector
+
+**Settings → Connectors → Add custom connector:**
+
+| Feld | Wert |
+|---|---|
+| URL | `https://<MCP_DOMAIN>/mcp` |
+| Client ID | `outlook-mcp` |
+| Client Secret | dein Plain‑`OIDC_CLIENT_SECRET` (nicht der bcrypt‑Hash) |
+
+Beim ersten Connect läuft der Authelia‑Login durch, danach sind die Tools dauerhaft verfügbar.
+
+## Lokale Nutzung (stdio, ohne Docker)
 
 ```bash
+git clone https://github.com/marco2901/outlook-mcp-server.git
+cd outlook-mcp-server
 npm install
-node index.js                       # stdio
-node index.js --http --port 3000    # HTTP mit OAuth-Callback auf :3000
+cp .env.example .env  # füllen
+node index.js --http --port 3333  # einmalig für OAuth-Bootstrap
+# Browser: http://localhost:3333/auth → Microsoft-Login
+
+# danach für Claude Desktop:
+node index.js
 ```
 
 `claude_desktop_config.json`:
@@ -117,9 +200,20 @@ node index.js --http --port 3000    # HTTP mit OAuth-Callback auf :3000
 }
 ```
 
-Bei lokalem stdio-Setup ohne HTTP-Listener musst du den OAuth-Bootstrap einmalig per `npm run auth-server` (legacy `outlook-auth-server.js` auf Port 3333) durchlaufen — oder genauso `node index.js --http --port 3333` einmal kurz starten und im Browser `/auth` aufrufen.
+## Discovery‑Endpoints (ungeschützt, public)
 
-## Upstream-Updates ziehen
+| Pfad | Inhalt |
+|---|---|
+| `/` | Landing‑Page mit Link auf `/auth` |
+| `/.well-known/oauth-authorization-server` | RFC 8414 — Authelia‑Endpoints |
+| `/.well-known/oauth-protected-resource` | RFC 9728 — verweist auf Authelia |
+| `/.well-known/oauth-protected-resource/mcp` | wie oben, resource = `/mcp` |
+| `/auth` | Redirect zu Microsoft‑Login |
+| `/auth/callback` | OAuth Callback, persistiert Tokens |
+
+`/mcp`, `/sse`, `/messages` sind durch die `authMiddleware` geschützt.
+
+## Upstream‑Updates ziehen
 
 ```bash
 git remote add upstream https://github.com/ryaker/outlook-mcp.git
@@ -127,8 +221,8 @@ git fetch upstream
 git merge upstream/main
 ```
 
-Konflikte primär in `index.js` (HTTP-Layer + Auth-Middleware), `config.js` (env-Pfade), `auth/token-storage.js` (TOKEN_STORE_PATH). Tool-Module bleiben unangetastet.
+Konflikte konzentrieren sich auf `index.js`, `config.js` und `auth/token-storage.js`. Die Tool‑Module (calendar/, email/, …) bleiben unangetastet.
 
 ## Lizenz
 
-MIT — wie Upstream.
+MIT — siehe [LICENSE](LICENSE). Doppel‑Copyright Upstream (Richard Yaker) + Fork (Marco Biegel).

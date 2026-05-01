@@ -4,6 +4,7 @@
 const config = require('../config');
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { normalizeAttachments } = require('../utils/attachment-helpers');
 
 /**
  * Send email handler
@@ -11,7 +12,7 @@ const { ensureAuthenticated } = require('../auth');
  * @returns {object} - MCP response
  */
 async function handleSendEmail(args) {
-  const { to, cc, bcc, subject, body, importance = 'normal', saveToSentItems = true, isHtml } = args;
+  const { to, cc, bcc, subject, body, importance = 'normal', saveToSentItems = true, isHtml, attachments } = args;
   
   // Validate required parameters
   if (!to) {
@@ -78,6 +79,10 @@ async function handleSendEmail(args) {
                         isHtml === false ? 'text' :
                         (body.includes('<html') || body.includes('<HTML')) ? 'html' : 'text';
 
+    // Resolve attachments (base64 inline OR loaded from OneDrive). Throws on
+    // unsupported entries or items above the 3 MB inline limit.
+    const graphAttachments = await normalizeAttachments(accessToken, attachments);
+
     // Prepare email object
     const emailObject = {
       message: {
@@ -89,18 +94,23 @@ async function handleSendEmail(args) {
         toRecipients,
         ccRecipients: ccRecipients.length > 0 ? ccRecipients : undefined,
         bccRecipients: bccRecipients.length > 0 ? bccRecipients : undefined,
-        importance
+        importance,
+        attachments: graphAttachments.length > 0 ? graphAttachments : undefined
       },
       saveToSentItems
     };
-    
+
     // Make API call to send email
     await callGraphAPI(accessToken, 'POST', 'me/sendMail', emailObject);
-    
+
+    const attachmentSummary = graphAttachments.length > 0
+      ? `\nAttachments: ${graphAttachments.length} (${graphAttachments.map(a => a.name).join(', ')})`
+      : '';
+
     return {
-      content: [{ 
-        type: "text", 
-        text: `Email sent successfully!\n\nSubject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}\nMessage Length: ${body.length} characters`
+      content: [{
+        type: "text",
+        text: `Email sent successfully!\n\nSubject: ${subject}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}${attachmentSummary}\nMessage Length: ${body.length} characters`
       }]
     };
   } catch (error) {

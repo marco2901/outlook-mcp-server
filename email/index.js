@@ -8,6 +8,27 @@ const handleSendEmail = require('./send');
 const handleDraftEmail = require('./draft');
 const handleMarkAsRead = require('./mark-as-read');
 const handleDeleteEmail = require('./delete');
+const handleListAttachments = require('./list-attachments');
+const handleGetAttachment = require('./get-attachment');
+
+// Reusable schema fragment for the `attachments` array on send-email / draft-email.
+const ATTACHMENTS_SCHEMA = {
+  type: "array",
+  description:
+    "Optional file attachments. Each entry must provide either `contentBytes` (base64 of the file, " +
+    "<= 3 MB) OR `onedrivePath` / `onedriveItemId` to attach a file from OneDrive. " +
+    "For files larger than 3 MB use onedrive-share to send a link instead.",
+  items: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Filename shown to the recipient" },
+      contentType: { type: "string", description: "MIME type (e.g. application/pdf). Optional, sniffed from OneDrive if omitted." },
+      contentBytes: { type: "string", description: "Base64-encoded file content. Mutually exclusive with onedrivePath/onedriveItemId." },
+      onedrivePath: { type: "string", description: "OneDrive path, e.g. /Documents/foo.pdf. Loaded into the attachment server-side." },
+      onedriveItemId: { type: "string", description: "OneDrive item ID. Alternative to onedrivePath." }
+    }
+  }
+};
 
 // Email tool definitions
 const emailTools = [
@@ -94,7 +115,7 @@ const emailTools = [
   },
   {
     name: "send-email",
-    description: "Composes and sends a new email. Supports both plain text and HTML content.",
+    description: "Composes and sends a new email. Supports plain text/HTML content and file attachments (inline base64 or loaded from OneDrive).",
     inputSchema: {
       type: "object",
       properties: {
@@ -130,7 +151,8 @@ const emailTools = [
         saveToSentItems: {
           type: "boolean",
           description: "Whether to save the email to sent items"
-        }
+        },
+        attachments: ATTACHMENTS_SCHEMA
       },
       required: ["to", "subject", "body"]
     },
@@ -138,7 +160,7 @@ const emailTools = [
   },
   {
     name: "draft-email",
-    description: "Creates and saves an email draft in Outlook",
+    description: "Creates and saves an email draft in Outlook. Supports file attachments (inline base64 or loaded from OneDrive).",
     inputSchema: {
       type: "object",
       properties: {
@@ -166,7 +188,8 @@ const emailTools = [
           type: "string",
           description: "Email importance (normal, high, low)",
           enum: ["normal", "high", "low"]
-        }
+        },
+        attachments: ATTACHMENTS_SCHEMA
       },
       required: []
     },
@@ -209,6 +232,35 @@ const emailTools = [
       required: ["id"]
     },
     handler: handleDeleteEmail
+  },
+  {
+    name: "list-attachments",
+    description: "Lists the attachments on a single email (id, name, contentType, size, isInline). Use get-attachment to download one.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Email ID" }
+      },
+      required: ["id"]
+    },
+    handler: handleListAttachments
+  },
+  {
+    name: "get-attachment",
+    description: "Downloads a single email attachment. By default returns base64 inline (for files < 256 KB). Pass saveToOneDrive to persist the file to a given OneDrive path instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Email ID containing the attachment" },
+        attachmentId: { type: "string", description: "Attachment ID from list-attachments" },
+        saveToOneDrive: {
+          type: "string",
+          description: "Optional. If set, decode the file and upload to this OneDrive path (e.g. \"/Documents/from-mail/foo.pdf\") instead of returning base64."
+        }
+      },
+      required: ["id", "attachmentId"]
+    },
+    handler: handleGetAttachment
   }
 ];
 
@@ -220,5 +272,7 @@ module.exports = {
   handleSendEmail,
   handleDraftEmail,
   handleMarkAsRead,
-  handleDeleteEmail
+  handleDeleteEmail,
+  handleListAttachments,
+  handleGetAttachment
 };

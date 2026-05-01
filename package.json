@@ -4,13 +4,11 @@
   "description": "MCP server for Microsoft 365 (Outlook, OneDrive, Power Automate) via Microsoft Graph API. Forked from ryaker/outlook-mcp with HTTP transport, MCP auth gateway and OAuth callback integrated.",
   "main": "index.js",
   "bin": {
-    "outlook-mcp": "./index.js",
-    "outlook-mcp-auth": "./outlook-auth-server.js"
+    "outlook-mcp": "./index.js"
   },
   "scripts": {
     "start": "node index.js",
     "start:http": "node index.js --http --port 3000",
-    "auth-server": "node outlook-auth-server.js",
     "test-mode": "USE_TEST_MODE=true node index.js",
     "inspect": "npx @modelcontextprotocol/inspector node index.js",
     "test": "jest"

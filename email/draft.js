@@ -3,6 +3,7 @@
  */
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
+const { normalizeAttachments } = require('../utils/attachment-helpers');
 
 /**
  * Draft email handler
@@ -12,7 +13,7 @@ const { ensureAuthenticated } = require('../auth');
  * @returns {object} - MCP response
  */
 async function handleDraftEmail(args) {
-  const { to, cc, bcc, subject = '', body = '', importance = 'normal' } = args || {};
+  const { to, cc, bcc, subject = '', body = '', importance = 'normal', attachments } = args || {};
 
   try {
     // Get access token
@@ -37,6 +38,10 @@ async function handleDraftEmail(args) {
         })).filter(r => r.emailAddress.address)
       : [];
 
+    // Resolve attachments (base64 inline OR loaded from OneDrive). Throws on
+    // unsupported entries or items above the 3 MB inline limit.
+    const graphAttachments = await normalizeAttachments(accessToken, attachments);
+
     // Create message payload for draft creation
     const messageObject = {
       subject,
@@ -47,16 +52,21 @@ async function handleDraftEmail(args) {
       toRecipients: toRecipients.length > 0 ? toRecipients : undefined,
       ccRecipients: ccRecipients.length > 0 ? ccRecipients : undefined,
       bccRecipients: bccRecipients.length > 0 ? bccRecipients : undefined,
-      importance
+      importance,
+      attachments: graphAttachments.length > 0 ? graphAttachments : undefined
     };
 
     // Create draft message
     const draft = await callGraphAPI(accessToken, 'POST', 'me/messages', messageObject);
 
+    const attachmentSummary = graphAttachments.length > 0
+      ? `\nAttachments: ${graphAttachments.length} (${graphAttachments.map(a => a.name).join(', ')})`
+      : '';
+
     return {
       content: [{
         type: "text",
-        text: `Draft created successfully!\n\nDraft ID: ${draft.id}\nSubject: ${draft.subject || '(no subject)'}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}`
+        text: `Draft created successfully!\n\nDraft ID: ${draft.id}\nSubject: ${draft.subject || '(no subject)'}\nRecipients: ${toRecipients.length}${ccRecipients.length > 0 ? ` + ${ccRecipients.length} CC` : ''}${bccRecipients.length > 0 ? ` + ${bccRecipients.length} BCC` : ''}${attachmentSummary}`
       }]
     };
   } catch (error) {
