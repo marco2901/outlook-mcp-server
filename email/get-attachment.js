@@ -11,6 +11,7 @@
 const { callGraphAPI } = require('../utils/graph-api');
 const { ensureAuthenticated } = require('../auth');
 const { formatSize } = require('../utils/attachment-helpers');
+const { uploadBufferToOneDrive } = require('../utils/onedrive-binary-upload');
 
 const INLINE_BASE64_CAP = 256 * 1024; // bytes (decoded) — keep MCP responses sane
 
@@ -48,17 +49,12 @@ async function handleGetAttachment(args) {
     }
 
     if (saveToOneDrive) {
-      // Upload bytes to OneDrive at the given path
+      // Decode the base64 payload to a Buffer and upload to OneDrive.
+      // uploadBufferToOneDrive transparently switches between simple PUT
+      // (<= 4 MB) and chunked upload session (> 4 MB), and uses raw binary
+      // PUTs so PDFs / images / Office files arrive intact.
       const buffer = Buffer.from(att.contentBytes, 'base64');
-      const normalizedPath = String(saveToOneDrive).replace(/^\/+|\/+$/g, '');
-      const endpoint = `me/drive/root:/${normalizedPath}:/content`;
-      const uploaded = await callGraphAPI(
-        accessToken,
-        'PUT',
-        endpoint,
-        buffer.toString('binary'),
-        { '@microsoft.graph.conflictBehavior': 'rename' }
-      );
+      const uploaded = await uploadBufferToOneDrive(accessToken, saveToOneDrive, buffer);
       return {
         content: [{
           type: 'text',

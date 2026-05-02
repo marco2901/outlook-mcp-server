@@ -247,7 +247,7 @@ const emailTools = [
   },
   {
     name: "get-attachment",
-    description: "Downloads a single email attachment. By default returns base64 inline (for files < 256 KB). Pass saveToOneDrive to persist the file to a given OneDrive path instead.",
+    description: "Downloads a single email attachment. By default returns base64 inline (for files < 256 KB). Pass saveToOneDrive to persist the file to a given OneDrive path instead — handles arbitrary sizes via chunked upload session, and writes raw binary so PDFs / images / Office files arrive intact.",
     inputSchema: {
       type: "object",
       properties: {
