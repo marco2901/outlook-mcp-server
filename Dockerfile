@@ -15,7 +15,6 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/index.js ./index.js
 COPY --from=builder /app/config.js ./config.js
-COPY --from=builder /app/outlook-auth-server.js ./outlook-auth-server.js
 COPY --from=builder /app/auth ./auth
 COPY --from=builder /app/calendar ./calendar
 COPY --from=builder /app/email ./email
