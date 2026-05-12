@@ -27,7 +27,7 @@ const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js'
 
 const config = require('./config');
 
-// Tool modules (unchanged from upstream)
+// Tool modules
 const { authTools } = require('./auth');
 const { calendarTools } = require('./calendar');
 const { emailTools } = require('./email');
@@ -35,6 +35,7 @@ const { folderTools } = require('./folder');
 const { rulesTools } = require('./rules');
 const { onedriveTools } = require('./onedrive');
 const { powerAutomateTools } = require('./power-automate');
+const { tasksTools } = require('./tasks');
 
 const TokenStorage = require('./auth/token-storage');
 
@@ -192,7 +193,8 @@ const TOOLS = [
   ...folderTools,
   ...rulesTools,
   ...onedriveTools,
-  ...powerAutomateTools
+  ...powerAutomateTools,
+  ...tasksTools
 ];
 
 function createServer() {

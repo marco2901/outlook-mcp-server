@@ -9,7 +9,7 @@ services:
       - MS_CLIENT_SECRET=${MS_CLIENT_SECRET}
       - MS_TENANT_ID=${MS_TENANT_ID:-common}
       - MS_AUTHORITY_HOST=${MS_AUTHORITY_HOST:-https://login.microsoftonline.com}
-      - MS_SCOPES=${MS_SCOPES:-offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Files.Read Files.ReadWrite Contacts.Read}
+      - MS_SCOPES=${MS_SCOPES:-offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Files.Read Files.ReadWrite Contacts.Read Tasks.Read Tasks.ReadWrite}
       # Public OAuth callback URL — must match the redirect URI registered in Azure
       - OAUTH_PUBLIC_BASE_URL=https://${MCP_DOMAIN}
       # Token persistence (mounted volume)

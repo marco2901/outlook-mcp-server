@@ -27,7 +27,7 @@ module.exports = {
     tenantId: process.env.MS_TENANT_ID || 'common',
     authorityHost: (process.env.MS_AUTHORITY_HOST || 'https://login.microsoftonline.com').replace(/\/+$/, ''),
     redirectUri: process.env.MS_REDIRECT_URI || `${publicBaseUrl}/auth/callback`,
-    scopes: ['offline_access', 'Mail.Read', 'Mail.ReadWrite', 'Mail.Send', 'User.Read', 'Calendars.Read', 'Calendars.ReadWrite', 'Contacts.Read', 'Files.Read', 'Files.ReadWrite'],
+    scopes: ['offline_access', 'Mail.Read', 'Mail.ReadWrite', 'Mail.Send', 'User.Read', 'Calendars.Read', 'Calendars.ReadWrite', 'Contacts.Read', 'Files.Read', 'Files.ReadWrite', 'Tasks.Read', 'Tasks.ReadWrite'],
     tokenStorePath: process.env.TOKEN_STORE_PATH || path.join(homeDir, '.outlook-mcp-tokens.json'),
     authServerUrl: publicBaseUrl
   },

@@ -22,6 +22,7 @@ COPY --from=builder /app/folder ./folder
 COPY --from=builder /app/onedrive ./onedrive
 COPY --from=builder /app/power-automate ./power-automate
 COPY --from=builder /app/rules ./rules
+COPY --from=builder /app/tasks ./tasks
 COPY --from=builder /app/utils ./utils
 
 RUN mkdir -p /data && chown node:node /data

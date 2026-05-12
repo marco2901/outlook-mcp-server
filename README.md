@@ -15,8 +15,9 @@ Komplett vom Upstream geerbt:
 
 | Bereich | Tools |
 |---|---|
-| **Mail** | list/search/read/send/move/delete, draft, mark‑as‑read |
+| **Mail** | list/search/read/send/move/delete, draft, mark‑as‑read, list/get attachments |
 | **Kalender** | list/create/cancel/accept/decline/delete events |
+| **Aufgaben (To Do)** | list‑lists, list/get/create/update/delete tasks |
 | **Folder** | list, create, move |
 | **Rules** | list, create, edit‑sequence |
 | **OneDrive** | list/search/download/upload (klein + chunked), share, delete, create‑folder |
@@ -59,6 +60,7 @@ Komplett vom Upstream geerbt:
    ```
    offline_access  User.Read  Mail.Read  Mail.ReadWrite  Mail.Send
    Calendars.Read  Calendars.ReadWrite  Files.Read  Files.ReadWrite  Contacts.Read
+   Tasks.Read  Tasks.ReadWrite
    ```
    → **Grant admin consent for <Tenant>**
 
@@ -108,7 +110,7 @@ services:
       - MS_CLIENT_SECRET=${MS_CLIENT_SECRET}
       - MS_TENANT_ID=${MS_TENANT_ID:-common}
       - MS_AUTHORITY_HOST=${MS_AUTHORITY_HOST:-https://login.microsoftonline.com}
-      - MS_SCOPES=${MS_SCOPES:-offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Files.Read Files.ReadWrite Contacts.Read}
+      - MS_SCOPES=${MS_SCOPES:-offline_access User.Read Mail.Read Mail.ReadWrite Mail.Send Calendars.Read Calendars.ReadWrite Files.Read Files.ReadWrite Contacts.Read Tasks.Read Tasks.ReadWrite}
       - OAUTH_PUBLIC_BASE_URL=https://${MCP_DOMAIN}
       - TOKEN_STORE_PATH=/data/outlook-mcp-tokens.json
       - MCP_API_KEY=${MCP_API_KEY}
