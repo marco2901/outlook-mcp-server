@@ -57,7 +57,11 @@ async function callGraphAPI(accessToken, method, path, data = null, queryParams 
 
         const parts = [];
         for (const [key, value] of Object.entries(queryParams)) {
-          parts.push(`${key}=${encodeURIComponent(value)}`);
+          // Comma is a URI sub-delim and safe literal in query values;
+          // Graph's /me/todo/* endpoint specifically rejects percent-encoded
+          // commas in $select / $orderby values with RequestBroker--ParseUri.
+          const encoded = encodeURIComponent(value).replace(/%2C/g, ',');
+          parts.push(`${key}=${encoded}`);
         }
         queryString = parts.join('&');
 
