@@ -56,7 +56,7 @@ async function handleUpdateTask(args) {
     const updated = await callGraphAPI(
       accessToken,
       'PATCH',
-      `me/todo/lists/${listId}/tasks/${encodeURIComponent(a.id)}`,
+      `me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(a.id)}`,
       payload
     );
 

@@ -46,7 +46,7 @@ async function handleCreateTask(args) {
     const created = await callGraphAPI(
       accessToken,
       'POST',
-      `me/todo/lists/${listId}/tasks`,
+      `me/todo/lists/${encodeURIComponent(listId)}/tasks`,
       payload
     );
 

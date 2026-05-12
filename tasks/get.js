@@ -19,7 +19,7 @@ async function handleGetTask(args) {
     const task = await callGraphAPI(
       accessToken,
       'GET',
-      `me/todo/lists/${listId}/tasks/${encodeURIComponent(taskId)}`
+      `me/todo/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(taskId)}`
     );
 
     if (!task) return { content: [{ type: 'text', text: 'Task not found.' }] };

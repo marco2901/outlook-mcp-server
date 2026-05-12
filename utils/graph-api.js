@@ -31,10 +31,17 @@ async function callGraphAPI(accessToken, method, path, data = null, queryParams 
       finalUrl = path;
       console.error(`Using full URL from nextLink: ${finalUrl}`);
     } else {
-      // Build URL from path and queryParams
-      // Encode path segments properly
+      // Build URL from path and queryParams.
+      // Path segments are percent-encoded ONLY if the caller didn't already
+      // do it themselves. This avoids double-encoding IDs like base64-style
+      // Outlook EwsIds (which contain `=`, `+`, `/`) that callers already
+      // pass through encodeURIComponent — double-encoding produces literal
+      // `%25` in the URL which Graph's todo endpoints reject with
+      // RequestBroker--ParseUri.
       const encodedPath = path.split('/')
-        .map(segment => encodeURIComponent(segment))
+        .map((segment) =>
+          /%[0-9A-Fa-f]{2}/.test(segment) ? segment : encodeURIComponent(segment)
+        )
         .join('/');
       
       // Build query string from parameters. Keep OData parameter keys (e.g.

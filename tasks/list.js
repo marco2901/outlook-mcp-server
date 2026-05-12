@@ -10,30 +10,37 @@ const TASK_SELECT_FIELDS =
   'createdDateTime,lastModifiedDateTime,categories,hasAttachments,bodyLastModifiedDateTime';
 
 async function resolveListId(accessToken, listIdOrName) {
-  // Accept either a real list ID, the wellknownListName ("defaultList", "flaggedEmails"),
+  // Accept a real list id, a wellknownListName ("defaultList", "flaggedEmails"),
   // or the displayName of an existing list. Returns the resolved id.
-  if (!listIdOrName) {
-    // Default to the well-known "defaultList" (Outlook's "Aufgaben" / "Tasks" list)
-    const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists', null, {
-      $filter: "wellknownListName eq 'defaultList'",
-      $select: 'id,displayName'
-    });
-    if (response.value && response.value.length > 0) return response.value[0].id;
-    throw new Error('No default task list found.');
-  }
-
-  // Treat anything starting with "AQMk" or similar Graph ID prefixes as a real id.
-  // Otherwise: try to resolve as displayName or wellknownListName.
-  if (/^[A-Za-z0-9_\-]{30,}$/.test(listIdOrName)) return listIdOrName;
-
+  // Strategy: always pull the lists once and match client-side — the
+  // /me/todo/lists $filter API needs the fully-qualified enum cast
+  // (microsoft.toDo.wellknownListName'defaultList') and is brittle.
   const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists', null, {
     $select: 'id,displayName,wellknownListName'
   });
-  const match = (response.value || []).find(
+  const lists = (response && response.value) || [];
+
+  if (!listIdOrName) {
+    const def = lists.find((l) => l.wellknownListName === 'defaultList');
+    if (def) return def.id;
+    throw new Error('No default task list found.');
+  }
+
+  // Exact id match first
+  const byId = lists.find((l) => l.id === listIdOrName);
+  if (byId) return byId.id;
+
+  // Then displayName / wellknownListName
+  const byName = lists.find(
     (l) => l.displayName === listIdOrName || l.wellknownListName === listIdOrName
   );
-  if (!match) throw new Error(`Task list "${listIdOrName}" not found.`);
-  return match.id;
+  if (byName) return byName.id;
+
+  // Fall back: treat as opaque id (lets callers pass an id the lists call
+  // didn't return, e.g. a shared list)
+  if (/^[A-Za-z0-9_\-=+/]{20,}$/.test(listIdOrName)) return listIdOrName;
+
+  throw new Error(`Task list "${listIdOrName}" not found.`);
 }
 
 function formatDateTimeTZ(dt) {
@@ -62,7 +69,7 @@ async function handleListTasks(args) {
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      `me/todo/lists/${listId}/tasks`,
+      `me/todo/lists/${encodeURIComponent(listId)}/tasks`,
       null,
       queryParams
     );
