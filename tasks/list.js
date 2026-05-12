@@ -13,11 +13,9 @@ async function resolveListId(accessToken, listIdOrName) {
   // Accept a real list id, a wellknownListName ("defaultList", "flaggedEmails"),
   // or the displayName of an existing list. Returns the resolved id.
   // Strategy: always pull the lists once and match client-side — the
-  // /me/todo/lists $filter API needs the fully-qualified enum cast
-  // (microsoft.toDo.wellknownListName'defaultList') and is brittle.
-  const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists', null, {
-    $select: 'id,displayName,wellknownListName'
-  });
+  // /me/todo/lists endpoint rejects both $filter (enum cast issues) and
+  // $select (RequestBroker--ParseUri). Default response has everything.
+  const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists');
   const lists = (response && response.value) || [];
 
   if (!listIdOrName) {

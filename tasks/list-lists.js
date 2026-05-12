@@ -7,9 +7,10 @@ const { ensureAuthenticated } = require('../auth');
 async function handleListTaskLists() {
   try {
     const accessToken = await ensureAuthenticated();
-    const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists', null, {
-      $select: 'id,displayName,wellknownListName,isOwner,isShared'
-    });
+    // Graph's /me/todo/lists endpoint rejects $select with RequestBroker--ParseUri
+    // (regardless of encoding). The default response already includes id,
+    // displayName, wellknownListName, isOwner, isShared so $select is redundant.
+    const response = await callGraphAPI(accessToken, 'GET', 'me/todo/lists');
 
     const lists = (response && response.value) || [];
     if (lists.length === 0) {
