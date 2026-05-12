@@ -37,24 +37,23 @@ async function callGraphAPI(accessToken, method, path, data = null, queryParams 
         .map(segment => encodeURIComponent(segment))
         .join('/');
       
-      // Build query string from parameters with special handling for OData filters
+      // Build query string from parameters. Keep OData parameter keys (e.g.
+      // `$select`, `$top`, `$filter`) un-encoded — URLSearchParams would turn
+      // `$` into `%24`, which most Graph endpoints accept but /me/todo/*
+      // rejects with RequestBroker--ParseUri. Only the *value* is encoded.
       let queryString = '';
       if (Object.keys(queryParams).length > 0) {
-        // Handle $filter parameter specially to ensure proper URI encoding
         const filter = queryParams.$filter;
         if (filter) {
-          delete queryParams.$filter; // Remove from regular params
+          delete queryParams.$filter;
         }
-        
-        // Build query string with proper encoding for regular params
-        const params = new URLSearchParams();
+
+        const parts = [];
         for (const [key, value] of Object.entries(queryParams)) {
-          params.append(key, value);
+          parts.push(`${key}=${encodeURIComponent(value)}`);
         }
-        
-        queryString = params.toString();
-        
-        // Add filter parameter separately with proper encoding
+        queryString = parts.join('&');
+
         if (filter) {
           if (queryString) {
             queryString += `&$filter=${encodeURIComponent(filter)}`;
@@ -62,11 +61,11 @@ async function callGraphAPI(accessToken, method, path, data = null, queryParams 
             queryString = `$filter=${encodeURIComponent(filter)}`;
           }
         }
-        
+
         if (queryString) {
           queryString = '?' + queryString;
         }
-        
+
         console.error(`Query string: ${queryString}`);
       }
       
