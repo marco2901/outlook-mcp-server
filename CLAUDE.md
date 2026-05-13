@@ -24,7 +24,9 @@ Graph + Flow API. The fork adds:
 - `config.js` — env-driven Microsoft Graph / OAuth config
 - `auth/token-storage.js` — token persistence + refresh (env-driven path)
 - `auth/`, `calendar/`, `email/`, `folder/`, `rules/`, `onedrive/`,
-  `power-automate/`, `utils/` — tool modules (untouched from upstream)
+  `power-automate/`, `utils/` — tool modules (mostly untouched from upstream)
+- `tasks/` — Microsoft To Do tools (`/me/todo/lists/...`), not in upstream;
+  read the quirks below before touching
 - `Dockerfile`, `docker-compose.yml`, `.env.example` — deployment
 - `.github/workflows/build-push.yml` — multi-arch GHCR image build on `main`
 
@@ -60,3 +62,33 @@ paths) and `auth/token-storage.js` (`TOKEN_STORE_PATH`). Tool modules under
   `example.com` style placeholders.
 - The MCP gateway auth is layered: `MCP_API_KEY` for CLI/Claude-Desktop access,
   Authelia OIDC introspection for Claude.ai cloud connectors. Both can coexist.
+
+## Microsoft Graph quirks (learned the hard way)
+
+The `/me/todo/*` endpoint family is much stricter about URL formatting than
+the rest of Graph. Things that work on `/me/messages`, `/me/events` and
+`/me/drive/*` but break here:
+
+1. **Percent-encoded `$` in OData keys.** `URLSearchParams.toString()` turns
+   `$select` into `%24select`; most endpoints accept either form, To Do
+   rejects with HTTP 400 `RequestBroker--ParseUri`. `utils/graph-api.js`
+   builds query strings manually for that reason — do not switch back to
+   `URLSearchParams`.
+2. **Percent-encoded commas (`%2C`) in `$select` / `$orderby` values.**
+   Same rejection. `utils/graph-api.js` post-processes encoded values to
+   keep commas literal — they're sub-delims under RFC 3986 and safe.
+3. **`$select` on the `/me/todo/lists` collection endpoint itself.**
+   Rejected entirely, even with no encoding issues. `tasks/list-lists.js`
+   and `resolveListId()` therefore call it bare; the default response
+   already contains `id`, `displayName`, `wellknownListName`, `isOwner`,
+   `isShared`. The per-list `/tasks` endpoint accepts `$select` fine.
+4. **`$filter` with enum literals** needs the fully-qualified cast
+   (`microsoft.toDo.wellknownListName'defaultList'`), not bare quotes.
+   We sidestep this by pulling all lists once and matching client-side.
+5. **List IDs and task IDs contain `/`, `=`, `+`.** They must be
+   `encodeURIComponent`'d before interpolation into the path. The graph-api
+   helper's per-segment encoder skips already-encoded segments
+   (`/%[0-9A-Fa-f]{2}/` test) to avoid double-encoding.
+
+If you add a new Graph integration, test against `/me/todo/*` before
+trusting that "Graph accepts this" — it's the canary endpoint here.
