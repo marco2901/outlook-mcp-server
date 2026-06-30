@@ -77,11 +77,12 @@ the rest of Graph. Things that work on `/me/messages`, `/me/events` and
 2. **Percent-encoded commas (`%2C`) in `$select` / `$orderby` values.**
    Same rejection. `utils/graph-api.js` post-processes encoded values to
    keep commas literal — they're sub-delims under RFC 3986 and safe.
-3. **`$select` on the `/me/todo/lists` collection endpoint itself.**
-   Rejected entirely, even with no encoding issues. `tasks/list-lists.js`
-   and `resolveListId()` therefore call it bare; the default response
-   already contains `id`, `displayName`, `wellknownListName`, `isOwner`,
-   `isShared`. The per-list `/tasks` endpoint accepts `$select` fine.
+3. **OData query params on `/me/todo/lists` AND
+   `/me/todo/lists/{id}/tasks`.** Both reject `$select`, `$top`, `$filter`,
+   `$orderby` outright with `RequestBroker--ParseUri`. `tasks/list-lists.js`
+   and `tasks/list.js` therefore call the endpoints bare and apply
+   filter/sort/limit client-side. Default responses contain everything we
+   need.
 4. **`$filter` with enum literals** needs the fully-qualified cast
    (`microsoft.toDo.wellknownListName'defaultList'`), not bare quotes.
    We sidestep this by pulling all lists once and matching client-side.

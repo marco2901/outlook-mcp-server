@@ -55,24 +55,30 @@ async function handleListTasks(args) {
     const accessToken = await ensureAuthenticated();
     const listId = await resolveListId(accessToken, listRef);
 
-    const queryParams = {
-      $top: count,
-      $orderby: 'createdDateTime desc',
-      $select: TASK_SELECT_FIELDS
-    };
-    if (!includeCompleted) {
-      queryParams.$filter = "status ne 'completed'";
-    }
-
+    // /me/todo/lists/{id}/tasks shares the lists collection's allergy to
+    // OData query params (RequestBroker--ParseUri / 400 even on $top).
+    // Fetch unfiltered and apply $filter / $orderby / $top semantics
+    // client-side — typical task counts (tens) make this cheap.
     const response = await callGraphAPI(
       accessToken,
       'GET',
-      `me/todo/lists/${encodeURIComponent(listId)}/tasks`,
-      null,
-      queryParams
+      `me/todo/lists/${encodeURIComponent(listId)}/tasks`
     );
 
-    const tasks = (response && response.value) || [];
+    let tasks = (response && response.value) || [];
+
+    if (!includeCompleted) {
+      tasks = tasks.filter((t) => t.status !== 'completed');
+    }
+
+    tasks.sort((a, b) => {
+      const aT = a.createdDateTime || '';
+      const bT = b.createdDateTime || '';
+      return bT.localeCompare(aT); // desc
+    });
+
+    if (tasks.length > count) tasks = tasks.slice(0, count);
+
     if (tasks.length === 0) {
       return {
         content: [{
