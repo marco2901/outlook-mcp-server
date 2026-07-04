@@ -52,9 +52,11 @@ async function loadOneDriveAsAttachment(accessToken, { path, itemId }) {
     ? `me/drive/items/${itemId}`
     : `me/drive/root:/${path.replace(/^\/+|\/+$/g, '')}`;
 
-  const meta = await callGraphAPI(accessToken, 'GET', endpoint, null, {
-    $select: 'id,name,size,file,@microsoft.graph.downloadUrl'
-  });
+  // Note: no $select — `@microsoft.graph.downloadUrl` is an instance
+  // annotation Graph only emits when the caller requests the full object;
+  // an explicit $select consistently drops it. The default response
+  // already contains id, name, size, file and the download URL.
+  const meta = await callGraphAPI(accessToken, 'GET', endpoint);
 
   if (!meta || !meta['@microsoft.graph.downloadUrl']) {
     throw new Error(`Could not get download URL for OneDrive item${path ? ` "${path}"` : ` ${itemId}`}.`);
